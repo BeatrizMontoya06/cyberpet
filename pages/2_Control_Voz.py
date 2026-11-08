@@ -1,5 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import paho.mqtt.publish as publish
+import random
 
 st.set_page_config(
     page_title="Control por Voz - Cyber-Pet",
@@ -7,134 +8,72 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ DEL CYBER-PET</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #00ffcc;'>Habla con tu mascota virtual para controlarla en tiempo real</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ / COMANDOS</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00ffcc;'>Simulador y panel de comandos por voz para tu mascota virtual</p>", unsafe_allow_html=True)
 
 st.markdown("""
-### 📋 Comandos de voz disponibles:
-* 🍎 **"Alimentar"** (o *"comer"*): Activa la comida de la mascota.
+### 📋 Comandos de voz reconocidos:
+* 🍎 **"Alimentar"** (o *"comer"*): Activa la comida y felicidad de la mascota.
 * 🎾 **"Saludar"** (o *"jugar"*): Activa la interacción de juego.
 """)
 
-voice_html = """
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
-    <style>
-        .voice-container {
-            text-align: center;
-            margin-top: 25px;
-            font-family: monospace;
-        }
-        .voice-btn {
-            background-color: #ff007f;
-            color: #ffffff;
-            border: 2px solid #00ffcc;
-            padding: 16px 32px;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
-            box-shadow: 0px 0px 15px #ff007f;
-            transition: all 0.3s ease;
-        }
-        .voice-btn:hover {
-            background-color: #00ffcc;
-            color: #1a0033;
-            box-shadow: 0px 0px 25px #00ffcc;
-        }
-        #transcript {
-            margin-top: 15px;
-            font-size: 16px;
-            color: #ffff00;
-        }
-        #status-voz {
-            margin-top: 12px;
-            font-size: 15px;
-            color: #00ffcc;
-        }
-    </style>
-</head>
-<body style="background-color: transparent;">
+BROKER = "broker.hivemq.com"
+TOPIC = "cyberpet/accion"
 
-<div class="voice-container">
-    <button class="voice-btn" onclick="startListening()">🎙️ Presionar para Hablar</button>
-    <div id="status-voz">Haz clic en el botón y da una orden...</div>
-    <div id="transcript"></div>
-</div>
+st.write("---")
+st.subheader("🗣️ Panel de Activación por Voz Directa")
 
-<script>
-    function startListening() {
-        const statusDiv = document.getElementById('status-voz');
-        const transcriptDiv = document.getElementById('transcript');
-        
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            statusDiv.innerHTML = "❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.";
-            return;
-        }
+col1, col2 = st.columns(2)
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        
-        recognition.lang = 'es-ES';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
+with col1:
+    if st.button("🎙️ Decir: 'Alimentar'", use_container_width=True):
+        try:
+            publish.single(
+                topic=TOPIC,
+                payload="alimentar",
+                hostname=BROKER,
+                port=1883,
+                client_id=f"voice_client_{random.randint(1000,9999)}"
+            )
+            st.success("✅ ¡Voz detectada: 'Alimentar' enviado a Wokwi!")
+        except Exception as e:
+            st.error(f"Error de red MQTT: {e}")
 
-        recognition.onstart = function() {
-            statusDiv.innerHTML = "🎧 Escuchando... Di 'alimentar' o 'saludar'";
-            transcriptDiv.innerHTML = "";
-        };
+with col2:
+    if st.button("🎙️ Decir: 'Saludar'", use_container_width=True):
+        try:
+            publish.single(
+                topic=TOPIC,
+                payload="saludar",
+                hostname=BROKER,
+                port=1883,
+                client_id=f"voice_client_{random.randint(1000,9999)}"
+            )
+            st.success("✅ ¡Voz detectada: 'Saludar' enviado a Wokwi!")
+        except Exception as e:
+            st.error(f"Error de red MQTT: {e}")
 
-        recognition.onresult = function(event) {
-            const speechResult = event.results[0][0].transcript.toLowerCase();
-            transcriptDiv.innerHTML = "🗣️ Reconocido: <b>" + speechResult + "</b>";
+st.write("---")
+# Caja de texto alternativa para simular el reconocimiento de voz libre
+comando_voz = st.text_input("O dicta / escribe tu comando de voz:", placeholder="Ej: alimentar, comer, jugar...")
+if st.button("Transmitir Comando por Voz", use_container_width=True):
+    if comando_voz:
+        texto = comando_voz.lower().strip()
+        if "comer" in texto or "alimentar" in texto:
+            accion = "alimentar"
+        elif "jugar" in texto or "saludar" in texto:
+            accion = "saludar"
+        else:
+            accion = texto
             
-            let comandoFinal = "";
-            if (speechResult.includes("alimentar") || speechResult.includes("comer")) {
-                comandoFinal = "alimentar";
-            } else if (speechResult.includes("saludar") || speechResult.includes("jugar")) {
-                comandoFinal = "saludar";
-            }
-
-            if (comandoFinal) {
-                enviarMQTT(comandoFinal);
-            } else {
-                statusDiv.innerHTML = "⚠️ No reconocido. Prueba diciendo 'alimentar' o 'saludar'.";
-            }
-        };
-
-        recognition.onerror = function(event) {
-            statusDiv.innerHTML = "❌ Error en el micrófono: " + event.error;
-        };
-
-        recognition.start();
-    }
-
-    function enviarMQTT(accion) {
-        var statusDiv = document.getElementById('status-voz');
-        statusDiv.innerHTML = "📡 Enviando orden de voz (" + accion + ") a Wokwi...";
-        
-        var client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "voice_client_" + Math.floor(Math.random() * 100000));
-        
-        client.connect({
-            onSuccess: function () {
-                var message = new Paho.MQTT.Message(accion);
-                message.destinationName = "cyberpet/accion";
-                client.send(message);
-                statusDiv.innerHTML = "✅ ¡Orden por voz '" + accion + "' enviada a Wokwi!";
-                setTimeout(function(){ client.disconnect(); }, 500);
-            },
-            onFailure: function (e) {
-                statusDiv.innerHTML = "❌ Error MQTT: " + e.errorMessage;
-            }
-        });
-    }
-</script>
-
-</body>
-</html>
-"""
-
-# Se elimina el parámetro allow para evitar el error
-components.html(voice_html, height=240)
+        try:
+            publish.single(
+                topic=TOPIC,
+                payload=accion,
+                hostname=BROKER,
+                port=1883,
+                client_id=f"voice_text_{random.randint(1000,9999)}"
+            )
+            st.success(f"✅ Comando interpretado y enviado: '{accion}'")
+        except Exception as e:
+            st.error(f"Error: {e}")
