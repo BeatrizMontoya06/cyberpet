@@ -1,4 +1,6 @@
 import streamlit as st
+import paho.mqtt.publish as publish
+import random
 import streamlit.components.v1 as components
 
 st.set_page_config(
@@ -7,20 +9,46 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ INTERFAZ DE VOZ MULTIMODAL</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #00ffcc;'>Habla con tu mascota virtual en tiempo real</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ INTELIGENTE</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00ffcc;'>Habla con tu mascota y observa el comando reconocido en tiempo real</p>", unsafe_allow_html=True)
 
-# Componente de voz interactivo real con micrófono y efectos visuales de escucha
-voice_component = """
+BROKER = "broker.hivemq.com"
+TOPIC = "cyberpet/accion"
+
+# Si el navegador detectó la voz y recargó con el comando, lo enviamos a Wokwi
+if "cmd" in st.query_params:
+    comando_recibido = st.query_params["cmd"]
+    try:
+        publish.single(
+            topic=TOPIC,
+            payload=comando_recibido,
+            hostname=BROKER,
+            port=1883,
+            client_id=f"voice_py_{random.randint(1000,9999)}"
+        )
+        st.success(f"🚀 ¡Orden por voz enviada a Wokwi con éxito: **{comando_recibido}**!")
+    except Exception as e:
+        st.error(f"Error al enviar MQTT: {e}")
+    
+    # Limpiamos el parámetro para evitar envíos repetidos al refrescar
+    st.query_params.clear()
+
+st.markdown("""
+### 📋 Comandos de voz admitidos:
+* 🍎 **"Alimentar"** (o *"comer"*)
+* 🎾 **"Saludar"** (o *"jugar"*)
+""")
+
+# Componente HTML con solicitud forzada de permisos y reconocimiento de voz nativo
+voice_html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
     <style>
         .voice-box {
-            background: rgba(26, 0, 51, 0.7);
-            border: 2px dashed #ff007f;
-            padding: 30px;
+            background: rgba(26, 0, 51, 0.85);
+            border: 2px solid #ff007f;
+            padding: 25px;
             border-radius: 15px;
             text-align: center;
             font-family: monospace;
@@ -31,10 +59,10 @@ voice_component = """
             background-color: #ff007f;
             color: #ffffff;
             border: 2px solid #00ffcc;
-            padding: 16px 30px;
+            padding: 16px 32px;
             font-size: 18px;
             font-weight: bold;
-            border-radius: 40px;
+            border-radius: 50px;
             cursor: pointer;
             box-shadow: 0px 0px 15px #ff007f;
             transition: all 0.2s ease;
@@ -55,15 +83,15 @@ voice_component = """
             70% { box-shadow: 0 0 0 20px rgba(0, 255, 204, 0); }
             100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
         }
-        #output-text {
-            margin-top: 20px;
-            font-size: 18px;
+        #transcript {
+            margin-top: 18px;
+            font-size: 19px;
             color: #ffff00;
             font-weight: bold;
         }
         #status-msg {
-            margin-top: 10px;
-            font-size: 14px;
+            margin-top: 12px;
+            font-size: 15px;
             color: #00ffcc;
         }
     </style>
@@ -71,107 +99,86 @@ voice_component = """
 <body style="background-color: transparent;">
 
 <div class="voice-box">
-    <button id="micButton" class="mic-btn" onclick="toggleListening()">🎙️ Activar Micrófono</button>
-    <div id="status-msg">Haz clic para empezar a hablar con tu mascota</div>
-    <div id="output-text">Escuchando: (ninguna orden aún)</div>
+    <button id="micButton" class="mic-btn" onclick="startListening()">🎙️ Activar Micrófono</button>
+    <div id="status-msg">Haz clic para solicitar permisos y hablar...</div>
+    <div id="transcript">Dijiste: (esperando voz)</div>
 </div>
 
 <script>
-    let recognition;
-    let isListening = false;
+    async function startListening() {
+        const statusDiv = document.getElementById('status-msg');
+        const transcriptDiv = document.getElementById('transcript');
 
-    function initSpeech() {
+        // 1. Forzamos la solicitud nativa de permisos del micrófono al navegador
+        try {
+            statusDiv.innerHTML = "🔒 Solicitando permisos de micrófono...";
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Liberamos el stream temporal
+        } catch (err) {
+            statusDiv.innerHTML = "❌ Permiso de micrófono denegado. Habilítalo en el navegador.";
+            return;
+        }
+
+        // 2. Iniciamos el reconocimiento de voz en español
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-            document.getElementById('status-msg').innerHTML = "❌ Tu navegador no soporta reconocimiento de voz nativo. Usa Google Chrome.";
-            return null;
+            statusDiv.innerHTML = "❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.";
+            return;
         }
 
-        const rec = new SpeechRecognition();
-        rec.lang = 'es-ES';
-        rec.continuous = false;
-        rec.interimResults = false;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'es-ES';
+        recognition.continuous = false;
+        recognition.interimResults = false;
 
-        rec.onstart = function() {
-            isListening = true;
+        recognition.onstart = function() {
             document.getElementById('micButton').className = "mic-btn listening";
             document.getElementById('micButton').innerHTML = "🔴 Escuchando voz...";
-            document.getElementById('status-msg').innerHTML = "Di un comando: <b>'Alimentar'</b> o <b>'Saludar'</b>";
+            statusDiv.innerHTML = "🎧 Te escucho... Di 'alimentar' o 'saludar'";
+            transcriptDiv.innerHTML = "Dijiste: ...";
         };
 
-        rec.onresult = function(event) {
+        recognition.onresult = function(event) {
             const speech = event.results[0][0].transcript.toLowerCase().trim();
-            document.getElementById('output-text').innerHTML = "🗣️ Dijiste: \"" + speech + "\"";
             
-            let accion = "";
-            if (speech.includes("alimentar") || speech.includes("comer") || speech.includes("comida")) {
-                accion = "alimentar";
-            } else if (speech.includes("saludar") || speech.includes("jugar") || speech.includes("hola")) {
-                accion = "saludar";
-            }
-
-            if (accion) {
-                document.getElementById('status-msg').innerHTML = "✅ Comando válido detectado: " + accion;
-                enviarMQTT(accion);
+            // Abajo muestra exactamente lo que dijiste
+            transcriptDiv.innerHTML = "🗣️ Dijiste: \"" + speech + "\"";
+            
+            let comando = "";
+            if (speech.includes("alimentar") || speech.includes("comer")) {
+                comando = "alimentar";
+            } else if (speech.includes("saludar") || speech.includes("jugar")) {
+                comando = "saludar";
             } else {
-                document.getElementById('status-msg').innerHTML = "⚠️ Comando no reconocido. Prueba de nuevo.";
+                comando = speech; // Envia el texto libre si coincide
             }
+
+            statusDiv.innerHTML = "✅ Detectado: <b>" + comando + "</b>. Enviando al circuito...";
+            
+            // Envía el comando recargando hacia Streamlit para gestionar el envío MQTT de forma segura
+            setTimeout(function() {
+                window.location.href = window.location.pathname + "?cmd=" + encodeURIComponent(comando);
+            }, 900);
         };
 
-        rec.onerror = function(event) {
-            document.getElementById('status-msg').innerHTML = "❌ Error de micrófono o red: " + event.error;
-            stopListeningVisual();
+        recognition.onerror = function(event) {
+            statusDiv.innerHTML = "❌ Error de reconocimiento: " + event.error;
+            resetBtn();
         };
 
-        rec.onend = function() {
-            stopListeningVisual();
+        recognition.onend = function() {
+            resetBtn();
         };
 
-        return rec;
+        recognition.start();
     }
 
-    function toggleListening() {
-        if (!recognition) {
-            recognition = initSpeech();
-        }
-        if (!recognition) return;
-
-        if (!isListening) {
-            try {
-                recognition.start();
-            } catch(e) {
-                recognition.stop();
-            }
-        } else {
-            recognition.stop();
-        }
-    }
-
-    function stopListeningVisual() {
-        isListening = false;
+    function resetBtn() {
         const btn = document.getElementById('micButton');
         if(btn) {
             btn.className = "mic-btn";
             btn.innerHTML = "🎙️ Activar Micrófono";
         }
-    }
-
-    function enviarMQTT(accion) {
-        document.getElementById('status-msg').innerHTML = "📡 Transmitiendo orden a Wokwi...";
-        var client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "voice_real_" + Math.floor(Math.random() * 100000));
-        
-        client.connect({
-            onSuccess: function () {
-                var message = new Paho.MQTT.Message(accion);
-                message.destinationName = "cyberpet/accion";
-                client.send(message);
-                document.getElementById('status-msg').innerHTML = "🚀 ¡Orden '" + accion + "' enviada al circuito!";
-                setTimeout(function(){ client.disconnect(); }, 600);
-            },
-            onFailure: function (e) {
-                document.getElementById('status-msg').innerHTML = "❌ Error al conectar al broker MQTT.";
-            }
-        });
     }
 </script>
 
@@ -179,4 +186,4 @@ voice_component = """
 </html>
 """
 
-components.html(voice_component, height=230)
+components.html(voice_html, height=250)
