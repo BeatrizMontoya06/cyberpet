@@ -29,7 +29,7 @@ st.markdown("""
         color: #00ffcc;
         font-family: 'Courier New', monospace;
         font-size: 14px;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }
     .tamagotchi-shell {
         background: #0d001a;
@@ -39,6 +39,15 @@ st.markdown("""
         text-align: center;
         box-shadow: 0px 0px 50px rgba(255, 0, 127, 0.4);
         margin-bottom: 20px;
+    }
+    .pet-name-banner {
+        color: #00ffcc;
+        font-family: 'Courier New', monospace;
+        font-size: 26px;
+        font-weight: bold;
+        text-shadow: 0px 0px 8px rgba(0, 255, 204, 0.6);
+        margin-bottom: 15px;
+        letter-spacing: 2px;
     }
     .stProgress > div > div > div > div {
         background-image: linear-gradient(to right, #ff007f , #00ffcc);
@@ -75,6 +84,8 @@ BROKER = "broker.hivemq.com"
 TOPIC = "cyberpet/accion"
 
 # --- INICIALIZACIÓN DE ESTADOS ---
+if "pet_name" not in st.session_state:
+    st.session_state.pet_name = "CyberKitty"
 if "hambre" not in st.session_state:
     st.session_state.hambre = 100
 if "felicidad" not in st.session_state:
@@ -88,12 +99,19 @@ if "expiracion_animacion" not in st.session_state:
 if "ultimo_refresco" not in st.session_state:
     st.session_state.ultimo_refresco = time.time()
 
+# --- INPUT PARA BAUTIZAR A LA MASCOTA ---
+col_n1, col_n2, col_n3 = st.columns([1, 2, 1])
+with col_n2:
+    st.session_state.pet_name = st.text_input("🏷️ Bautiza o cambia el nombre de tu Cyber-Pet:", value=st.session_state.pet_name)
+
+st.write("")
+
 # --- GESTIÓN DE TIEMPO Y ANIMACIONES TEMPORALES ---
 tiempo_actual = time.time()
 tiempo_transcurrido = tiempo_actual - st.session_state.ultimo_refresco
 st.session_state.ultimo_refresco = tiempo_actual
 
-# Si la mascota está haciendo una acción temporal (comer, medicina, jugar) y ya pasaron 3 segundos, regresa a normal
+# Si la mascota está haciendo una acción temporal y ya pasaron 3 segundos, regresa a normal
 if tiempo_actual > st.session_state.expiracion_animacion and st.session_state.estado_mascota in ["alimentar", "medicina", "saludar"]:
     st.session_state.estado_mascota = "normal"
 
@@ -117,6 +135,10 @@ if st.session_state.estado_mascota != "muerto":
 # --- INTERFAZ PRINCIPAL (PANTALLA TAMAGOTCHI) ---
 with st.container():
     st.markdown("<div class='tamagotchi-shell'>", unsafe_allow_html=True)
+    
+    # 🐾 NOMBRE DE LA MASCOTA EN EL ESPACIO SUPERIOR DE LA CARCASA
+    nombre_mostrado = st.session_state.pet_name.strip() if st.session_state.pet_name else "Cyber-Pet"
+    st.markdown(f"<div class='pet-name-banner'>🐾 {nombre_mostrado.upper()} 🐾</div>", unsafe_allow_html=True)
     
     # Carga segura de la imagen actual en formato .jpeg
     avatar_path = f"assets/{st.session_state.estado_mascota}.jpeg"
@@ -149,7 +171,7 @@ with st.container():
 
     # MUERTE Y REGENERACIÓN
     if st.session_state.estado_mascota == "muerto":
-        st.error("💀 ¡ALERTA CRÍTICA! TU CYBER-PET HA COLAPSADO Y HA MUERTO.")
+        st.error(f"💀 ¡ALERTA CRÍTICA! {nombre_mostrado} HA COLAPSADO Y HA MUERTO.")
         if st.button("🔄 REGENERAR / REVIVIR MASCOTA", use_container_width=True):
             st.session_state.hambre = 100
             st.session_state.felicidad = 100
@@ -174,7 +196,7 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="alimentar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "alimentar"
-                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de comer durante 3 segundos exactos
+                st.session_state.expiracion_animacion = time.time() + 3
                 st.session_state.hambre = min(100, st.session_state.hambre + 30)
                 st.rerun()
             except Exception as e:
@@ -185,7 +207,7 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="saludar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "medicina"
-                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de medicina durante 3 segundos exactos
+                st.session_state.expiracion_animacion = time.time() + 3
                 st.session_state.energia = min(100, st.session_state.energia + 20)
                 st.session_state.felicidad = min(100, st.session_state.felicidad + 15)
                 st.rerun()
@@ -198,18 +220,18 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="saludar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "saludar"
-                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de saludar durante 3 segundos exactos
+                st.session_state.expiracion_animacion = time.time() + 3
                 st.session_state.felicidad = min(100, st.session_state.felicidad + 30)
                 st.session_state.energia = max(0, st.session_state.energia - 10)
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        # 4. Dormir / Durmiendo (Alterna el modo de suspensión)
+        # 4. Dormir / Durmiendo
         if st.button("🌙 Dormir / Descansar", use_container_width=True):
             if st.session_state.estado_mascota == "durmiendo":
                 st.session_state.estado_mascota = "normal"
             else:
                 st.session_state.estado_mascota = "durmiendo"
-                st.session_state.expiracion_animacion = 0  # Sin límite de tiempo, duerme hasta que lo despierten
+                st.session_state.expiracion_animacion = 0
             st.rerun()
