@@ -83,27 +83,34 @@ if "energia" not in st.session_state:
     st.session_state.energia = 100
 if "estado_mascota" not in st.session_state:
     st.session_state.estado_mascota = "normal"
+if "expiracion_animacion" not in st.session_state:
+    st.session_state.expiracion_animacion = 0
 if "ultimo_refresco" not in st.session_state:
     st.session_state.ultimo_refresco = time.time()
 
-# --- LÓGICA DE TIEMPO REAL (DINÁMICA DE BARRAS) ---
+# --- GESTIÓN DE TIEMPO Y ANIMACIONES TEMPORALES ---
 tiempo_actual = time.time()
 tiempo_transcurrido = tiempo_actual - st.session_state.ultimo_refresco
 st.session_state.ultimo_refresco = tiempo_actual
 
+# Si la mascota está haciendo una acción temporal (comer, medicina, jugar) y ya pasaron 3 segundos, regresa a normal
+if tiempo_actual > st.session_state.expiracion_animacion and st.session_state.estado_mascota in ["alimentar", "medicina", "saludar"]:
+    st.session_state.estado_mascota = "normal"
+
+# --- LÓGICA DE SUPERVIVENCIA Y BARRAS ---
 if st.session_state.estado_mascota != "muerto":
     if st.session_state.estado_mascota == "durmiendo":
-        # Si está durmiendo, la energía RECUPERA, el hambre baja más lento
+        # Durmiendo recupera energía y gasta poco hambre
         st.session_state.energia = min(100, st.session_state.energia + (tiempo_transcurrido * 2.0))
         st.session_state.hambre = max(0, st.session_state.hambre - (tiempo_transcurrido * 0.2))
     else:
-        # Si está despierto, gasta energía, hambre y felicidad con el tiempo
+        # Despierto gasta estadísticas
         tasa = 0.4
         st.session_state.hambre = max(0, st.session_state.hambre - (tiempo_transcurrido * tasa))
         st.session_state.felicidad = max(0, st.session_state.felicidad - (tiempo_transcurrido * (tasa * 0.8)))
         st.session_state.energia = max(0, st.session_state.energia - (tiempo_transcurrido * (tasa * 0.6)))
 
-    # Condición de muerte (si hambre, felicidad o energía llegan a 0)
+    # Muerte si alguna estadística llega a 0
     if st.session_state.hambre <= 0 or st.session_state.felicidad <= 0 or st.session_state.energia <= 0:
         st.session_state.estado_mascota = "muerto"
 
@@ -111,7 +118,7 @@ if st.session_state.estado_mascota != "muerto":
 with st.container():
     st.markdown("<div class='tamagotchi-shell'>", unsafe_allow_html=True)
     
-    # Carga la imagen basándose exactamente en el nombre del estado (.jpeg)
+    # Carga segura de la imagen actual en formato .jpeg
     avatar_path = f"assets/{st.session_state.estado_mascota}.jpeg"
     
     col_pantalla_centro = st.columns([1, 4, 1])
@@ -120,11 +127,11 @@ with st.container():
             st.image(avatar_path, width=350)
         except:
             st.markdown(f"### 🐾 Estado Actual: {st.session_state.estado_mascota.upper()}")
-            st.caption(f"No se encontró el archivo '{st.session_state.estado_mascota}.jpeg' en assets/")
+            st.caption(f"Falta el archivo '{st.session_state.estado_mascota}.jpeg' en assets/")
 
     st.markdown("---")
     
-    # 3 ESTADÍSTICAS VITALES (Hambre, Felicidad, Energía)
+    # 3 ESTADÍSTICAS VITALES
     st.markdown("### 📊 ESTADÍSTICAS VITALES")
     col_stat1, col_stat2, col_stat3 = st.columns(3)
     
@@ -140,7 +147,7 @@ with st.container():
         st.markdown(f"⚡ **Energía:** {int(st.session_state.energia)}%")
         st.progress(int(st.session_state.energia))
 
-    # LÓGICA DE MUERTE Y REGENERACIÓN
+    # MUERTE Y REGENERACIÓN
     if st.session_state.estado_mascota == "muerto":
         st.error("💀 ¡ALERTA CRÍTICA! TU CYBER-PET HA COLAPSADO Y HA MUERTO.")
         if st.button("🔄 REGENERAR / REVIVIR MASCOTA", use_container_width=True):
@@ -148,6 +155,7 @@ with st.container():
             st.session_state.felicidad = 100
             st.session_state.energia = 100
             st.session_state.estado_mascota = "normal"
+            st.session_state.expiracion_animacion = 0
             st.rerun()
             
     st.markdown("</div>", unsafe_allow_html=True)
@@ -166,10 +174,8 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="alimentar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "alimentar"
+                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de comer durante 3 segundos exactos
                 st.session_state.hambre = min(100, st.session_state.hambre + 30)
-                st.success("¡Comando 'alimentar' enviado al Wokwi!")
-                time.sleep(1)
-                st.session_state.estado_mascota = "normal"
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -179,11 +185,9 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="saludar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "medicina"
+                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de medicina durante 3 segundos exactos
                 st.session_state.energia = min(100, st.session_state.energia + 20)
                 st.session_state.felicidad = min(100, st.session_state.felicidad + 15)
-                st.success("¡Comando 'medicina' enviado!")
-                time.sleep(1)
-                st.session_state.estado_mascota = "normal"
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -194,22 +198,18 @@ else:
             try:
                 publish.single(topic=TOPIC, payload="saludar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "saludar"
+                st.session_state.expiracion_animacion = time.time() + 3  # Muestra la imagen de saludar durante 3 segundos exactos
                 st.session_state.felicidad = min(100, st.session_state.felicidad + 30)
                 st.session_state.energia = max(0, st.session_state.energia - 10)
-                st.success("¡Comando 'saludar' enviado al Wokwi!")
-                time.sleep(1)
-                st.session_state.estado_mascota = "normal"
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        # 4. Dormir / Durmiendo
+        # 4. Dormir / Durmiendo (Alterna el modo de suspensión)
         if st.button("🌙 Dormir / Descansar", use_container_width=True):
             if st.session_state.estado_mascota == "durmiendo":
                 st.session_state.estado_mascota = "normal"
-                st.success("¡Has despertado a tu Cyber-Pet!")
             else:
                 st.session_state.estado_mascota = "durmiendo"
-                st.success("¡Tu Cyber-Pet se ha ido a dormir! (Presiona de nuevo para despertar)")
-            time.sleep(1)
+                st.session_state.expiracion_animacion = 0  # Sin límite de tiempo, duerme hasta que lo despierten
             st.rerun()
