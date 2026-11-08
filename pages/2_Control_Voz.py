@@ -15,7 +15,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- AUTO-REFRESH EN TIEMPO REAL (Para sincronizar estadísticas y animaciones) ---
+# --- AUTO-REFRESH EN TIEMPO REAL ---
 count = st_autorefresh(interval=2000, limit=None, key="voice_tamagotchi_refresher")
 
 # --- ESTILOS VISUALES RETRO / CYBERPUNK ---
@@ -105,6 +105,8 @@ if "estado_mascota" not in st.session_state:
     st.session_state.estado_mascota = "normal"
 if "expiracion_animacion" not in st.session_state:
     st.session_state.expiracion_animacion = 0
+if "ultimo_audio_procesado" not in st.session_state:
+    st.session_state.ultimo_audio_procesado = None
 if "ultimo_refresco" not in st.session_state:
     st.session_state.ultimo_refresco = time.time()
 
@@ -137,7 +139,6 @@ with st.container():
     nombre_mostrado = st.session_state.pet_name.strip() if st.session_state.pet_name else "Cyber-Pet"
     st.markdown(f"<div class='pet-name-banner'>🐾 {nombre_mostrado.upper()} 🐾</div>", unsafe_allow_html=True)
     
-    # Imagen dinámica en formato .jpeg
     avatar_path = f"assets/{st.session_state.estado_mascota}.jpeg"
     
     col_pantalla_centro = st.columns([1, 4, 1])
@@ -181,7 +182,7 @@ with st.container():
 st.write("---")
 st.markdown("### 🔴 Control de Micrófono:")
 
-# Componente nativo de grabación intacto
+# Componente de grabación
 audio_data = mic_recorder(
     start_prompt="🔴 Iniciar Micrófono (Hablar)",
     stop_prompt="⏹️ Detener y Transcribir",
@@ -190,89 +191,94 @@ audio_data = mic_recorder(
 )
 
 if audio_data:
-    st.info("🔄 Procesando y transcribiendo tu voz...")
+    webm_bytes = audio_data['bytes']
     
-    try:
-        webm_bytes = audio_data['bytes']
+    # Creamos un identificador único (hash simple) para este audio exacto
+    audio_id = hash(webm_bytes)
+    
+    # Verificamos si este audio ya fue procesado antes para evitar bucles o ejecuciones repetidas
+    if st.session_state.ultimo_audio_procesado != audio_id:
+        st.session_state.ultimo_audio_procesado = audio_id  # Lo marcamos como procesado inmediatamente
         
-        # Conversión intacta con PyAV
-        input_container = av.open(io.BytesIO(webm_bytes), mode='r')
-        output_buffer = io.BytesIO()
+        st.info("🔄 Procesando y transcribiendo tu voz...")
         
-        output_container = av.open(output_buffer, mode='w', format='wav')
-        in_stream = input_container.streams.audio[0]
-        out_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
-        
-        for frame in input_container.decode(in_stream):
-            for packet in out_stream.encode(frame):
+        try:
+            # Conversión intacta con PyAV
+            input_container = av.open(io.BytesIO(webm_bytes), mode='r')
+            output_buffer = io.BytesIO()
+            
+            output_container = av.open(output_buffer, mode='w', format='wav')
+            in_stream = input_container.streams.audio[0]
+            out_stream = output_container.add_stream('pcm_s16le', rate=16000, layout='mono')
+            
+            for frame in input_container.decode(in_stream):
+                for packet in out_stream.encode(frame):
+                    output_container.mux(packet)
+                    
+            for packet in out_stream.encode():
                 output_container.mux(packet)
                 
-        for packet in out_stream.encode():
-            output_container.mux(packet)
+            output_container.close()
+            wav_bytes = output_buffer.getvalue()
             
-        output_container.close()
-        wav_bytes = output_buffer.getvalue()
-        
-        # Reconocimiento de voz
-        r = sr.Recognizer()
-        with sr.AudioFile(io.BytesIO(wav_bytes)) as source:
-            audio_leido = r.record(source)
-            texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
+            # Reconocimiento de voz
+            r = sr.Recognizer()
+            with sr.AudioFile(io.BytesIO(wav_bytes)) as source:
+                audio_leido = r.record(source)
+                texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
+                
+            st.success("¡Transcripción exitosa!")
+            st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Dijiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
             
-        st.success("¡Transcripción exitosa!")
-        st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Dijiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
-        
-        # Filtrado de comandos y actualización de estados visuales/MQTT
-        texto_lower = texto_transcrito.lower().strip()
-        comando = ""
-        
-        if st.session_state.estado_mascota == "muerto":
-            st.warning("⚠️ Mascota inactiva. Debes revivirla en el panel superior antes de usar comandos de voz.")
-        else:
-            if "alimentar" in texto_lower or "comer" in texto_lower:
-                comando = "alimentar"
-                st.session_state.estado_mascota = "alimentar"
-                st.session_state.expiracion_animacion = time.time() + 3
-                st.session_state.hambre = min(100, st.session_state.hambre + 30)
-            elif "saludar" in texto_lower or "jugar" in texto_lower:
-                comando = "saludar"
-                st.session_state.estado_mascota = "saludar"
-                st.session_state.expiracion_animacion = time.time() + 3
-                st.session_state.felicidad = min(100, st.session_state.felicidad + 30)
-                st.session_state.energia = max(0, st.session_state.energia - 10)
-            elif "medicina" in texto_lower or "curar" in texto_lower:
-                comando = "saludar"  # Payload mapeado al Wokwi
-                st.session_state.estado_mascota = "medicina"
-                st.session_state.expiracion_animacion = time.time() + 3
-                st.session_state.energia = min(100, st.session_state.energia + 20)
-                st.session_state.felicidad = min(100, st.session_state.felicidad + 15)
-            elif "dormir" in texto_lower or "descansar" in texto_lower or "apagar" in texto_lower:
-                comando = "alimentar" # Payload de soporte
-                if st.session_state.estado_mascota == "durmiendo":
-                    st.session_state.estado_mascota = "normal"
-                else:
-                    st.session_state.estado_mascota = "durmiendo"
-                    st.session_state.expiracion_animacion = 0
-
-            if comando:
-                st.info(f"🎯 ¡Comando válido detectado ('{comando}'). Enviando señal a Wokwi...")
-                try:
-                    publish.single(
-                        topic=TOPIC,
-                        payload=comando,
-                        hostname=BROKER,
-                        port=1883,
-                        client_id=f"voice_client_{random.randint(1000,9999)}"
-                    )
-                    st.success(f"🚀 ¡Señal '{comando}' enviada con éxito al Wokwi!")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as mqtt_err:
-                    st.error(f"❌ Error al enviar la señal MQTT: {mqtt_err}")
+            # Filtrado de comandos por única vez
+            texto_lower = texto_transcrito.lower().strip()
+            comando = ""
+            
+            if st.session_state.estado_mascota == "muerto":
+                st.warning("⚠️ Mascota inactiva. Debes revivirla en el panel superior antes de usar comandos de voz.")
             else:
-                st.warning(f"⚠️ Dijiste '{texto_transcrito}', pero no es un comando válido. No se envió ninguna señal.")
-            
-    except sr.UnknownValueError:
-        st.warning("⚠️ El micrófono se activó, pero no se entendió ninguna palabra clara. Intenta hablar más cerca.")
-    except Exception as e:
-        st.error(f"❌ Error al procesar el audio: {e}")
+                if "alimentar" in texto_lower or "comer" in texto_lower:
+                    comando = "alimentar"
+                    st.session_state.estado_mascota = "alimentar"
+                    st.session_state.expiracion_animacion = time.time() + 3
+                    st.session_state.hambre = min(100, st.session_state.hambre + 30)
+                elif "saludar" in texto_lower or "jugar" in texto_lower:
+                    comando = "saludar"
+                    st.session_state.estado_mascota = "saludar"
+                    st.session_state.expiracion_animacion = time.time() + 3
+                    st.session_state.felicidad = min(100, st.session_state.felicidad + 30)
+                    st.session_state.energia = max(0, st.session_state.energia - 10)
+                elif "medicina" in texto_lower or "curar" in texto_lower:
+                    comando = "saludar"
+                    st.session_state.estado_mascota = "medicina"
+                    st.session_state.expiracion_animacion = time.time() + 3
+                    st.session_state.energia = min(100, st.session_state.energia + 20)
+                    st.session_state.felicidad = min(100, st.session_state.felicidad + 15)
+                elif "dormir" in texto_lower or "descansar" in texto_lower or "apagar" in texto_lower:
+                    comando = "alimentar"
+                    if st.session_state.estado_mascota == "durmiendo":
+                        st.session_state.estado_mascota = "normal"
+                    else:
+                        st.session_state.estado_mascota = "durmiendo"
+                        st.session_state.expiracion_animacion = 0
+
+                if comando:
+                    st.info(f"🎯 ¡Comando válido detectado ('{comando}'). Enviando señal a Wokwi...")
+                    try:
+                        publish.single(
+                            topic=TOPIC,
+                            payload=comando,
+                            hostname=BROKER,
+                            port=1883,
+                            client_id=f"voice_client_{random.randint(1000,9999)}"
+                        )
+                        st.success(f"🚀 ¡Señal '{comando}' enviada con éxito al Wokwi!")
+                    except Exception as mqtt_err:
+                        st.error(f"❌ Error al enviar la señal MQTT: {mqtt_err}")
+                else:
+                    st.warning(f"⚠️ Dijiste '{texto_transcrito}', pero no es un comando válido. No se envió ninguna señal.")
+                
+        except sr.UnknownValueError:
+            st.warning("⚠️ El micrófono se activó, pero no se entendió ninguna palabra clara. Intenta hablar más cerca.")
+        except Exception as e:
+            st.error(f"❌ Error al procesar el audio: {e}")
