@@ -136,5 +136,5 @@ voice_html = """
 </html>
 """
 
-# IMPORTANTE: Añadimos allow="microphone" para que el navegador permita el acceso al hardware
-components.html(voice_html, height=240, allow="microphone")
+# Se elimina el parámetro allow para evitar el error
+components.html(voice_html, height=240)
