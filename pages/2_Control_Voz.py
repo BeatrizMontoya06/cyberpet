@@ -29,17 +29,21 @@ if audio_data:
     
     try:
         r = sr.Recognizer()
-        # Leemos los bytes del audio capturado por el micrófono real
-        audio_file = sr.AudioFile(io.BytesIO(audio_data['bytes']))
+        audio_bytes = audio_data['bytes']
         
-        with audio_file as source:
-            audio_leido = r.record(source)
-            # Transcribimos usando el servicio de Google en español
-            texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
+        # Intentamos decodificar el audio directamente con el lector de bytes crudos del navegador
+        try:
+            audio_data_obj = sr.AudioData(audio_bytes, 16000, 2)
+            texto_transcrito = r.recognize_google(audio_data_obj, language="es-ES")
+        except Exception:
+            # Respaldo usando flujo de BytesIO si el contenedor WAV nativo lo permite
+            with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+                audio_leido = r.record(source)
+                texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
             
-            # Mostramos el resultado en pantalla tal como lo pediste
-            st.success("¡Transcripción exitosa!")
-            st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Transcribiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
+        # Mostramos el resultado en pantalla tal como lo pediste
+        st.success("¡Transcripción exitosa!")
+        st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Transcribiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
             
     except sr.UnknownValueError:
         st.warning("⚠️ El micrófono se activó y grabó, pero no se entendió ninguna palabra clara. Intenta hablar más cerca.")
