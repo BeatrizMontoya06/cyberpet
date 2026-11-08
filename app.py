@@ -11,38 +11,21 @@ st.markdown("<h1 style='text-align: center; color: #ffff00;'>👾 CYBER-PET VIRT
 st.markdown("<p style='text-align: center; color: #ff99ff;'>Panel de Control y Alimentación Táctil</p>", unsafe_allow_html=True)
 
 st.subheader("🐾 Estado de la Mascota: Conectada")
-st.write("Haz clic en los botones para controlar el circuito físico en Wokwi:")
+st.write("Haz clic para enviar la orden a Wokwi:")
 
-# Componente web que envía las órdenes por MQTT a través del navegador
 mqtt_js_code = """
 <!DOCTYPE html>
 <html>
 <head>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
     <style>
-        .btn-container {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            margin-top: 15px;
-        }
+        .btn-container { display: flex; gap: 20px; justify-content: center; margin-top: 15px; }
         .cyber-btn {
-            background-color: #1a0033;
-            color: #00ffcc;
-            border: 2px solid #ff007f;
-            padding: 14px 28px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0px 0px 12px #ff007f;
-            transition: all 0.2s ease;
+            background-color: #1a0033; color: #00ffcc; border: 2px solid #ff007f;
+            padding: 14px 28px; font-size: 16px; font-weight: bold; border-radius: 8px;
+            cursor: pointer; box-shadow: 0px 0px 12px #ff007f;
         }
-        .cyber-btn:hover {
-            background-color: #ff007f;
-            color: #ffffff;
-            box-shadow: 0px 0px 22px #00ffcc;
-        }
+        .cyber-btn:hover { background-color: #ff007f; color: #ffffff; }
     </style>
 </head>
 <body style="background-color: transparent;">
@@ -57,20 +40,21 @@ mqtt_js_code = """
 <script>
     function enviarComando(accion) {
         var statusDiv = document.getElementById('status');
-        statusDiv.innerHTML = "📡 Enviando orden de " + accion + "...";
+        statusDiv.innerHTML = "📡 Conectando al broker...";
         
-        var client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web_client_" + Math.floor(Math.random() * 100000));
+        // Usamos el puerto seguro de WebSocket para evitar bloqueos del navegador (8000 o 800)
+        var client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web_user_" + Math.floor(Math.random() * 100000));
         
         client.connect({
             onSuccess: function () {
                 var message = new Paho.MQTT.Message(accion);
-                message.destinationName = "cyberpet/accion";
+                message.destinationName = "test/topic/beatriz";
                 client.send(message);
-                statusDiv.innerHTML = "✅ ¡Orden '" + accion + "' ejecutada con éxito en Wokwi!";
-                setTimeout(function(){ client.disconnect(); }, 800);
+                statusDiv.innerHTML = "✅ ¡Enviado con éxito: " + accion + "!";
+                setTimeout(function(){ client.disconnect(); }, 500);
             },
             onFailure: function (e) {
-                statusDiv.innerHTML = "❌ Error de conexión: " + e.errorMessage;
+                statusDiv.innerHTML = "❌ Error web MQTT: " + e.errorMessage;
             }
         });
     }
