@@ -1,12 +1,8 @@
 import streamlit as st
 from streamlit_mic_recorder import mic_recorder
 import speech_recognition as sr
-from pydub import AudioSegment
-import imageio_ffmpeg
-import io
-
-# Configuramos pydub para que use el ffmpeg empaquetado en Python automáticamente
-AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
+import tempfile
+import os
 
 st.set_page_config(
     page_title="Transcriptor de Voz Real",
@@ -15,13 +11,13 @@ st.set_page_config(
 )
 
 st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ TRANSCRIPTOR DE VOZ EN TIEMPO REAL</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #00ffcc;'>Paso 1: Validar activación real del micrófono del dispositivo</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00ffcc;'>Paso 1: Transcripción especializada de audio</p>", unsafe_allow_html=True)
 
 st.write("---")
 st.markdown("### 🔴 Control de Micrófono:")
-st.markdown("Haz clic en el botón de abajo para activar el micrófono de tu PC o celular.")
+st.markdown("Haz clic en el botón para activar el micrófono de tu dispositivo.")
 
-# Grabador nativo que abre el micrófono real
+# Grabador nativo del navegador
 audio_data = mic_recorder(
     start_prompt="🔴 Iniciar Micrófono (Hablar)",
     stop_prompt="⏹️ Detener y Transcribir",
@@ -30,28 +26,34 @@ audio_data = mic_recorder(
 )
 
 if audio_data:
-    st.info("🔄 Convirtiendo y procesando tu voz en texto...")
+    st.info("🔄 Procesando audio con motor especializado...")
     
     try:
         audio_bytes = audio_data['bytes']
         
-        # Convertimos los bytes de WebM (navegador) a WAV PCM estándar usando pydub + imageio-ffmpeg
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        wav_io = io.BytesIO()
-        audio_segment.export(wav_io, format="wav")
-        wav_io.seek(0)
-        
-        # Procesamos el WAV limpio con SpeechRecognition
-        r = sr.Recognizer()
-        with sr.AudioFile(wav_io) as source:
-            audio_leido = r.record(source)
-            texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
+        # Guardamos los bytes en un archivo temporal real en disco (.webm/.wav)
+        # para que SpeechRecognition lo lea de forma nativa sin requerir pydub ni ffprobe
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            tmp_file.write(audio_bytes)
+            tmp_file_path = tmp_file.name
+
+        try:
+            r = sr.Recognizer()
+            with sr.AudioFile(tmp_file_path) as source:
+                audio_leido = r.record(source)
+                # Usamos el motor de reconocimiento web especializado
+                texto_transcrito = r.recognize_google(audio_leido, language="es-ES")
+                
+            st.success("¡Transcripción exitosa!")
+            st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Transcribiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
             
-        # Mostramos el resultado exitoso en pantalla
-        st.success("¡Transcripción exitosa!")
-        st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Transcribiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
+        except Exception as inner_err:
+            st.error(f"❌ Error en la lectura del archivo de audio: {inner_err}")
             
-    except sr.UnknownValueError:
-        st.warning("⚠️ El micrófono grabó con éxito, pero no se entendió ninguna palabra clara. Intenta hablar más cerca.")
+        finally:
+            # Limpiamos el archivo temporal del servidor
+            if os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
+                
     except Exception as e:
-        st.error(f"❌ Error al procesar el audio: {e}")
+        st.error(f"❌ Error general en el proceso: {e}")
