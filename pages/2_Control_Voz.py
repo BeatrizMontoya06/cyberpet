@@ -10,14 +10,12 @@ st.set_page_config(
 st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ DEL CYBER-PET</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #00ffcc;'>Habla con tu mascota virtual para controlarla en tiempo real</p>", unsafe_allow_html=True)
 
-# Guía visual de comandos
 st.markdown("""
 ### 📋 Comandos de voz disponibles:
 * 🍎 **"Alimentar"** (o *"comer"*): Activa la comida de la mascota.
 * 🎾 **"Saludar"** (o *"jugar"*): Activa la interacción de juego.
 """)
 
-# Componente HTML + JavaScript con el botón de micrófono y reconocimiento de voz
 voice_html = """
 <!DOCTYPE html>
 <html>
@@ -71,7 +69,6 @@ voice_html = """
         const statusDiv = document.getElementById('status-voz');
         const transcriptDiv = document.getElementById('transcript');
         
-        // Comprobamos compatibilidad con el navegador (ideal usar Google Chrome)
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             statusDiv.innerHTML = "❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.";
             return;
@@ -80,7 +77,7 @@ voice_html = """
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         
-        recognition.lang = 'es-ES'; // Configurado en español
+        recognition.lang = 'es-ES';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
 
@@ -139,4 +136,5 @@ voice_html = """
 </html>
 """
 
-components.html(voice_html, height=240)
+# IMPORTANTE: Añadimos allow="microphone" para que el navegador permita el acceso al hardware
+components.html(voice_html, height=240, allow="microphone")
