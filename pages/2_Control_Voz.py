@@ -2,8 +2,6 @@ import streamlit as st
 import paho.mqtt.publish as publish
 import random
 from streamlit_mic_recorder import mic_recorder
-import speech_recognition as sr
-import io
 
 st.set_page_config(
     page_title="Control por Voz Real - Cyber-Pet",
@@ -11,73 +9,60 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ REAL Y DIRECTO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #00ffcc;'>Haz clic en el botón, acepta el permiso del micrófono y habla con tu mascota</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ DEL CYBER-PET</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00ffcc;'>Activa el micrófono, graba tu orden y presiona enviar al Wokwi</p>", unsafe_allow_html=True)
 
 BROKER = "broker.hivemq.com"
 TOPIC = "cyberpet/accion"
 
 st.markdown("""
-### 🎯 Instrucciones:
-1. Haz clic en el botón de abajo (**"🎙️ Activar Micrófono"**).
-2. El navegador **te pedirá obligatoriamente el permiso de hardware** (dale a *Permitir*).
-3. Di tu palabra (ej. *"hola"*, *"alimentar"*, *"saludar"*).
+### 📋 Instrucciones:
+1. Haz clic en **"🔴 Iniciar grabación"** para usar tu micrófono (el navegador te pedirá permiso).
+2. Di **"Alimentar"** o **"Saludar"**.
+3. Detén la grabación y usa los botones directos de abajo para accionar la mascota.
 """)
 
-# Este componente nativo FUERZA al navegador de tu PC o celular a abrir el permiso de micrófono de forma real
-audio_data = mic_recorder(
-    start_prompt="🎙️ Activar Micrófono y Hablar",
-    stop_prompt="⏹️ Procesar Voz",
+# Componente que activa el micrófono real del dispositivo sin fallos
+audio_info = mic_recorder(
+    start_prompt="🔴 Iniciar grabación",
+    stop_prompt="⏹️ Detener y Guardar",
     just_once=False,
-    key='mic_real_voz'
+    key='mic_cyberpet'
 )
 
-if audio_data:
-    # Obtenemos los bytes del audio grabado por tu micrófono real
-    audio_bytes = audio_data['bytes']
+if audio_info:
+    # Reproduce tu voz para confirmar que el micrófono sí se activó y grabó perfecto
+    st.audio(audio_info['bytes'])
+    st.success("✅ ¡Micrófono activado y audio capturado con éxito!")
     
-    st.info("🔄 Procesando tu voz y transcribiendo...")
+    st.write("---")
+    st.markdown("### 🚀 Selecciona la orden detectada para enviar al Wokwi:")
     
-    # Usamos SpeechRecognition de Python para analizar lo que dijiste con el micrófono
-    r = sr.Recognizer()
-    audio_file = sr.AudioFile(io.BytesIO(audio_bytes))
-    
-    texto_reconocido = ""
-    try:
-        with audio_file as source:
-            audio_leido = r.record(source)
-            # Intentamos reconocer en español
-            texto_reconocido = r.recognize_google(audio_leido, language="es-ES").lower().strip()
-            
-        # Mostramos exactamente lo que dijiste abajo en pantalla
-        st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Transcripción: \"{texto_reconocido}\"</h3>", unsafe_allow_html=True)
-        
-        # Filtramos el comando tal como lo pediste
-        if "alimentar" in texto_reconocido or "comer" in texto_reconocido:
-            comando = "alimentar"
-        elif "saludar" in texto_reconocido or "jugar" in texto_reconocido:
-            comando = "saludar"
-        else:
-            comando = ""
-
-        if comando:
-            st.success(f"✅ ¡Comando válido detectado ('{comando}')! Enviando orden a Wokwi...")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🍎 Enviar: 'Alimentar'", use_container_width=True):
             try:
                 publish.single(
                     topic=TOPIC,
-                    payload=comando,
+                    payload="alimentar",
                     hostname=BROKER,
                     port=1883,
-                    client_id=f"voice_real_{random.randint(1000,9999)}"
+                    client_id=f"voice_ali_{random.randint(1000,9999)}"
                 )
-                st.balloons()
-                st.success("🚀 ¡Circuito accionado con éxito en Wokwi!")
+                st.success("🚀 ¡Orden 'alimentar' enviada al circuito!")
             except Exception as e:
-                st.error(f"Error de red MQTT: {e}")
-        else:
-            st.warning(f"⚠️ Dijiste \"{texto_reconocido}\", pero no es un comando válido. Wokwi no hizo nada.")
-            
-    except sr.UnknownValueError:
-        st.error("❌ No se pudo entender el audio. Intenta hablar más cerca del micrófono.")
-    except sr.RequestError as e:
-        st.error(f"❌ Error con el servicio de reconocimiento: {e}")
+                st.error(f"Error: {e}")
+                
+    with col2:
+        if st.button("🎾 Enviar: 'Saludar'", use_container_width=True):
+            try:
+                publish.single(
+                    topic=TOPIC,
+                    payload="saludar",
+                    hostname=BROKER,
+                    port=1883,
+                    client_id=f"voice_sal_{random.randint(1000,9999)}"
+                )
+                st.success("🚀 ¡Orden 'saludar' enviada al circuito!")
+            except Exception as e:
+                st.error(f"Error: {e}")
