@@ -9,7 +9,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ REAL</h1>", stylesheet=None)
+st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ CONTROL POR VOZ REAL</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #00ffcc;'>Usa el micrófono de tu dispositivo para ordenar acciones a la mascota</p>", unsafe_allow_html=True)
 
 BROKER = "broker.hivemq.com"
@@ -17,14 +17,13 @@ TOPIC = "cyberpet/accion"
 
 st.markdown("""
 ### 🎯 Elige el comando y habla:
-Haz clic en el botón correspondiente. El navegador te pedirá **permiso para usar el micrófono** (dale a *Permitir*), di tu orden y al detener la grabación se enviará al instante a Wokwi.
+Haz clic en el botón correspondiente. El navegador te pedirá **permiso para usar el micrófono**, di tu orden y al detener la grabación se enviará al instante a Wokwi.
 """)
 
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("#### 🍎 Orden: Alimentar")
-    # Este componente SÍ abre la ventana nativa de permisos del navegador
     audio_comer = mic_recorder(
         start_prompt="🔴 Hablar: Alimentar",
         stop_prompt="⏹️ Enviar a Wokwi",
