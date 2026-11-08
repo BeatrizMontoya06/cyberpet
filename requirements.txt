@@ -2,3 +2,4 @@ streamlit
 paho-mqtt
 streamlit-bokeh-events
 bokeh
+streamlit-mic-recorder
