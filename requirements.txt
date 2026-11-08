@@ -5,3 +5,4 @@ bokeh
 streamlit-mic-recorder
 SpeechRecognition
 av
+streamlit-autorefresh
