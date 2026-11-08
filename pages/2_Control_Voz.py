@@ -1,7 +1,5 @@
 import streamlit as st
-from streamlit_mic_recorder import mic_recorder
-import speech_recognition as sr
-import io
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="Transcriptor de Voz",
@@ -9,40 +7,130 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ TRANSCRIPTOR DE VOZ A TEXTO</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #00ffcc;'>Paso 1: Transcripción directa sin dependencias externas</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff007f;'>🎙️ TRANSCRIPTOR DE VOZ DIRECTO</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00ffcc;'>Paso 1: Habla y observa la transcripción exacta en texto</p>", unsafe_allow_html=True)
 
-st.write("---")
-st.markdown("### 🔴 Haz clic en el botón para hablar:")
+# Componente web puro con la API de voz del navegador (SpeechRecognition)
+transcriptor_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .card {
+            background: rgba(26, 0, 51, 0.9);
+            border: 2px solid #ff007f;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            font-family: monospace;
+            box-shadow: 0px 0px 25px rgba(255, 0, 127, 0.4);
+            margin-top: 20px;
+        }
+        .btn-hablar {
+            background-color: #ff007f;
+            color: #ffffff;
+            border: 2px solid #00ffcc;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0px 0px 15px #ff007f;
+            transition: all 0.2s ease;
+        }
+        .btn-hablar:hover {
+            background-color: #00ffcc;
+            color: #1a0033;
+            box-shadow: 0px 0px 25px #00ffcc;
+            transform: scale(1.05);
+        }
+        .escuchando {
+            animation: pulse 1.2s infinite;
+            background-color: #00ffcc !important;
+            color: #1a0033 !important;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.8); }
+            70% { box-shadow: 0 0 0 20px rgba(0, 255, 204, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
+        }
+        #resultado {
+            margin-top: 25px;
+            font-size: 22px;
+            color: #ffff00;
+            font-weight: bold;
+        }
+        #estado {
+            margin-top: 15px;
+            font-size: 15px;
+            color: #00ffcc;
+        }
+    </style>
+</head>
+<body style="background-color: transparent;">
 
-# Configuramos el grabador para intentar forzar formato WAV si el navegador lo permite
-audio_info = mic_recorder(
-    start_prompt="🎙️ Iniciar Grabación",
-    stop_prompt="⏹️ Detener y Transcribir",
-    just_once=False,
-    key='transcriptor_voz_limpio'
-)
+<div class="card">
+    <button id="micBtn" class="btn-hablar" onclick="iniciarTranscripcion()">🎙️ Iniciar Transcripción</button>
+    <div id="estado">Haz clic para activar el micrófono y hablar...</div>
+    <div id="resultado">🗣️ Texto transcrito: (esperando voz)</div>
+</div>
 
-if audio_info:
-    st.audio(audio_info['bytes'])
-    st.info("🔄 Procesando transcripción...")
-    
-    try:
-        r = sr.Recognizer()
-        # Leemos los bytes directamente usando AudioFile con un objeto BytesIO
-        with sr.AudioFile(io.BytesIO(audio_info['bytes'])) as source:
-            audio_data = r.record(source)
-            texto_transcrito = r.recognize_google(audio_data, language="es-ES")
+<script>
+    function iniciarTranscripcion() {
+        const estadoDiv = document.getElementById('estado');
+        const resultadoDiv = document.getElementById('resultado');
+        const btn = document.getElementById('micBtn');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            estadoDiv.innerHTML = "❌ Tu navegador no soporta esta función. Usa Google Chrome.";
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'es-ES';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = function() {
+            btn.className = "btn-hablar escuchando";
+            btn.innerHTML = "🔴 Escuchando...";
+            estadoDiv.innerHTML = "🎧 Te escucho... Di cualquier palabra.";
+            resultadoDiv.innerHTML = "🗣️ Texto transcrito: ...";
+        };
+
+        recognition.onresult = function(event) {
+            // Captura EXACTAMENTE lo que dijiste en texto plano
+            const textoVoz = event.results[0][0].transcript.toLowerCase().trim();
             
-            st.success("¡Transcripción exitosa!")
-            st.markdown(f"<h3 style='color: #ffff00; text-align: center;'>🗣️ Dijiste: \"{texto_transcrito}\"</h3>", unsafe_allow_html=True)
-            
-    except Exception as e:
-        # Si el navegador grabó en WebM y SpeechRecognition nativo no lo lee sin ffmpeg,
-        # te damos la alternativa de texto simulado inmediato para avanzar al control del Wokwi
-        st.warning("⚠️ El navegador envió el audio en contenedor comprimido (WebM). Para evitar depender de FFmpeg en el servidor, usa esta consola de prueba rápida de voz:")
-        
-        texto_manual = st.text_input("Simula o ingresa lo que dijiste con tu voz:", placeholder="ej. alimentar, saludar, hola...")
-        if st.button("Procesar Texto Transcrito"):
-            if texto_manual:
-                st.markdown(f"<h3 style='color: #00ffcc; text-align: center;'>✅ Texto procesado: \"{texto_manual.lower().strip()}\"</h3>", unsafe_allow_html=True)
+            // Muestra abajo el texto exacto
+            resultadoDiv.innerHTML = "🗣️ Texto transcrito: \"" + textoVoz + "\"";
+            estadoDiv.innerHTML = "✅ ¡Transcripción completada con éxito!";
+        };
+
+        recognition.onerror = function(event) {
+            estadoDiv.innerHTML = "❌ Error con el micrófono: " + event.error;
+            resetearBoton();
+        };
+
+        recognition.onend = function() {
+            resetearBoton();
+        };
+
+        recognition.start();
+    }
+
+    function resetearBoton() {
+        const btn = document.getElementById('micBtn');
+        if(btn) {
+            btn.className = "btn-hablar";
+            btn.innerHTML = "🎙️ Iniciar Transcripción";
+        }
+    }
+</script>
+
+</body>
+</html>
+"""
+
+components.html(transcriptor_html, height=270)
