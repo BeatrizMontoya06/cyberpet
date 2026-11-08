@@ -3,3 +3,5 @@ paho-mqtt
 streamlit-bokeh-events
 bokeh
 streamlit-mic-recorder
+SpeechRecognition
+pydub
