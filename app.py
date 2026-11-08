@@ -92,7 +92,7 @@ tiempo_transcurrido = tiempo_actual - st.session_state.ultimo_refresco
 st.session_state.ultimo_refresco = tiempo_actual
 
 if st.session_state.estado_mascota != "muerto":
-    if st.session_state.estado_mascota == "dormir":
+    if st.session_state.estado_mascota == "durmiendo":
         # Si está durmiendo, la energía RECUPERA, el hambre baja más lento
         st.session_state.energia = min(100, st.session_state.energia + (tiempo_transcurrido * 2.0))
         st.session_state.hambre = max(0, st.session_state.hambre - (tiempo_transcurrido * 0.2))
@@ -111,7 +111,7 @@ if st.session_state.estado_mascota != "muerto":
 with st.container():
     st.markdown("<div class='tamagotchi-shell'>", unsafe_allow_html=True)
     
-    # Imagen dinámica basada en el estado actual (.jpeg)
+    # Carga la imagen basándose exactamente en el nombre del estado (.jpeg)
     avatar_path = f"assets/{st.session_state.estado_mascota}.jpeg"
     
     col_pantalla_centro = st.columns([1, 4, 1])
@@ -120,7 +120,7 @@ with st.container():
             st.image(avatar_path, width=350)
         except:
             st.markdown(f"### 🐾 Estado Actual: {st.session_state.estado_mascota.upper()}")
-            st.caption(f"Asegúrate de tener la imagen '{st.session_state.estado_mascota}.jpeg' en la carpeta assets/")
+            st.caption(f"No se encontró el archivo '{st.session_state.estado_mascota}.jpeg' en assets/")
 
     st.markdown("---")
     
@@ -195,7 +195,7 @@ else:
                 publish.single(topic=TOPIC, payload="saludar", hostname=BROKER, port=1883, client_id=f"st_{random.randint(1000,9999)}")
                 st.session_state.estado_mascota = "saludar"
                 st.session_state.felicidad = min(100, st.session_state.felicidad + 30)
-                st.session_state.energia = max(0, st.session_state.energia - 10) # Jugar gasta un poco de energía
+                st.session_state.energia = max(0, st.session_state.energia - 10)
                 st.success("¡Comando 'saludar' enviado al Wokwi!")
                 time.sleep(1)
                 st.session_state.estado_mascota = "normal"
@@ -203,15 +203,13 @@ else:
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        # 4. Dormir (Mantiene a la mascota en modo sueño recuperando energía)
+        # 4. Dormir / Durmiendo
         if st.button("🌙 Dormir / Descansar", use_container_width=True):
-            if st.session_state.estado_mascota == "dormir":
-                # Si ya está durmiendo, lo despertamos
+            if st.session_state.estado_mascota == "durmiendo":
                 st.session_state.estado_mascota = "normal"
                 st.success("¡Has despertado a tu Cyber-Pet!")
             else:
-                # Lo ponemos a dormir
-                st.session_state.estado_mascota = "dormir"
-                st.success("¡Tu Cyber-Pet se ha ido a dormir a recuperar energía! (Presiona de nuevo para despertar)")
+                st.session_state.estado_mascota = "durmiendo"
+                st.success("¡Tu Cyber-Pet se ha ido a dormir! (Presiona de nuevo para despertar)")
             time.sleep(1)
             st.rerun()
