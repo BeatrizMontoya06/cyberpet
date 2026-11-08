@@ -1,6 +1,5 @@
 import streamlit as st
-import paho.mqtt.client as paho
-import random
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="~*~ Cyber-Pet Virtual ~*~",
@@ -11,43 +10,74 @@ st.set_page_config(
 st.markdown("<h1 style='text-align: center; color: #ffff00;'>👾 CYBER-PET VIRTUAL IoT 👾</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #ff99ff;'>Panel de Control y Alimentación Táctil</p>", unsafe_allow_html=True)
 
-# Usamos el broker con configuración de WebSockets para navegadores
-BROKER = "broker.hivemq.com"
-PORT = 8000  # Puerto WebSocket estándar de HiveMQ
-TOPIC = "cyberpet/accion"
-
 st.subheader("🐾 Estado de la Mascota: Conectada")
-st.write("Haz clic para enviar una orden física a Wokwi:")
+st.write("Haz clic en los botones para controlar el circuito físico en Wokwi:")
 
-col1, col2 = st.columns(2)
+# Componente web que envía las órdenes por MQTT a través del navegador
+mqtt_js_code = """
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
+    <style>
+        .btn-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .cyber-btn {
+            background-color: #1a0033;
+            color: #00ffcc;
+            border: 2px solid #ff007f;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0px 0px 12px #ff007f;
+            transition: all 0.2s ease;
+        }
+        .cyber-btn:hover {
+            background-color: #ff007f;
+            color: #ffffff;
+            box-shadow: 0px 0px 22px #00ffcc;
+        }
+    </style>
+</head>
+<body style="background-color: transparent;">
 
-with col1:
-    if st.button("🍎 Dar de Comer", use_container_width=True):
-        try:
-            client_id = f"web_{random.randint(10000, 99999)}"
-            # IMPORTANTE: Indicamos transport="websockets" para que el navegador permita la salida
-            client = paho.Client(client_id=client_id, transport="websockets")
-            client.connect(BROKER, PORT, 60)
-            
-            info = client.publish(TOPIC, "alimentar")
-            info.wait_for_publish()
-            client.disconnect()
-            
-            st.success("✅ Mensaje 'alimentar' enviado por WebSocket!")
-        except Exception as e:
-            st.error(f"❌ Error al enviar MQTT: {e}")
+<div class="btn-container">
+    <button class="cyber-btn" onclick="enviarComando('alimentar')">🍎 Dar de Comer</button>
+    <button class="cyber-btn" onclick="enviarComando('saludar')">🎾 Jugar con Mascota</button>
+</div>
 
-with col2:
-    if st.button("🎾 Jugar con Mascota", use_container_width=True):
-        try:
-            client_id = f"web_{random.randint(10000, 99999)}"
-            client = paho.Client(client_id=client_id, transport="websockets")
-            client.connect(BROKER, PORT, 60)
-            
-            info = client.publish(TOPIC, "saludar")
-            info.wait_for_publish()
-            client.disconnect()
-            
-            st.success("✅ Mensaje 'saludar' enviado por WebSocket!")
-        except Exception as e:
-            st.error(f"❌ Error al enviar MQTT: {e}")
+<div id="status" style="color: #00ffcc; text-align: center; margin-top: 20px; font-family: monospace; font-size: 14px;"></div>
+
+<script>
+    function enviarComando(accion) {
+        var statusDiv = document.getElementById('status');
+        statusDiv.innerHTML = "📡 Enviando orden de " + accion + "...";
+        
+        var client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web_client_" + Math.floor(Math.random() * 100000));
+        
+        client.connect({
+            onSuccess: function () {
+                var message = new Paho.MQTT.Message(accion);
+                message.destinationName = "cyberpet/accion";
+                client.send(message);
+                statusDiv.innerHTML = "✅ ¡Orden '" + accion + "' ejecutada con éxito en Wokwi!";
+                setTimeout(function(){ client.disconnect(); }, 800);
+            },
+            onFailure: function (e) {
+                statusDiv.innerHTML = "❌ Error de conexión: " + e.errorMessage;
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
+"""
+
+components.html(mqtt_js_code, height=160)
